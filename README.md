@@ -1,184 +1,380 @@
-<div align="center">
-<img src="https://github.com/Lifelong-Robot-Learning/LIBERO/blob/master/images/libero_logo.png" width="360">
+# Perturbation Evaluation for VLA-Adapter on LIBERO
 
-
-<p align="center">
-<a href="https://github.com/Lifelong-Robot-Learning/LIBERO/actions">
-<img alt="Tests Passing" src="https://github.com/anuraghazra/github-readme-stats/workflows/Test/badge.svg" />
-</a>
-<a href="https://github.com/Lifelong-Robot-Learning/LIBERO/graphs/contributors">
-<img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/Lifelong-Robot-Learning/LIBERO" />
-</a>
-<a href="https://github.com/Lifelong-Robot-Learning/LIBERO/issues">
-<img alt="Issues" src="https://img.shields.io/github/issues/Lifelong-Robot-Learning/LIBERO?color=0088ff" />
-
-## **Benchmarking Knowledge Transfer for Lifelong Robot Learning**
-
-Bo Liu, Yifeng Zhu, Chongkai Gao, Yihao Feng, Qiang Liu, Yuke Zhu, Peter Stone
-
-[[Website]](https://libero-project.github.io)
-[[Paper]](https://arxiv.org/pdf/2306.03310.pdf)
-[[Docs]](https://lifelong-robot-learning.github.io/LIBERO/)
-______________________________________________________________________
-![pull_figure](https://github.com/Lifelong-Robot-Learning/LIBERO/blob/master/images//fig1.png)
-</div>
-
-**LIBERO** is designed for studying knowledge transfer in multitask and lifelong robot learning problems. Successfully resolving these problems require both declarative knowledge about objects/spatial relationships and procedural knowledge about motion/behaviors. **LIBERO** provides:
-- a procedural generation pipeline that could in principle generate an infinite number of manipulation tasks.
-- 130 tasks grouped into four task suites: **LIBERO-Spatial**, **LIBERO-Object**, **LIBERO-Goal**, and **LIBERO-100**. The first three task suites have controlled distribution shifts, meaning that they require the transfer of a specific type of knowledge. In contrast, **LIBERO-100** consists of 100 manipulation tasks that require the transfer of entangled knowledge. **LIBERO-100** is further splitted into **LIBERO-90** for pretraining a policy and **LIBERO-10** for testing the agent's downstream lifelong learning performance.
-- five research topics.
-- three visuomotor policy network architectures.
-- three lifelong learning algorithms with the sequential finetuning and multitask learning baselines.
+This document describes how to add noise and physical perturbations to rollout evaluation in the VLA-Adapter + LIBERO pipeline. Three independent perturbation mechanisms are implemented, each controllable via CLI flags.
 
 ---
 
+## Overview
 
-# Contents
+| Perturbation type | Module | What it corrupts |
+|---|---|---|
+| Action noise | `action_noise.py` | Policy output actions before execution |
+| Observation noise | `visual_noise.py` | Camera images before feeding to policy |
+| Object force | `env_perturbations.py` | MuJoCo physics — pushes objects mid-rollout |
 
-- [Installation](#Installation)
-- [Datasets](#Dataset)
-- [Getting Started](#Getting-Started)
-  - [Task](#Task)
-  - [Training](#Training)
-  - [Evaluation](#Evaluation)
-- [Citation](#Citation)
-- [License](#License)
+All three can be combined in a single run.
 
+---
 
-# Installtion
-Please run the following commands in the given order to install the dependency for **LIBERO**.
-```
-conda create -n libero python=3.8.13
-conda activate libero
-git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git
-cd LIBERO
-pip install -r requirements.txt
-pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
-```
+## Setup
 
-Then install the `libero` package:
-```
+### Prerequisites
+
+Clone and install VLA-Adapter and LIBERO:
+
+```bash
+git clone https://github.com/your-org/VLA-Adapter
+cd VLA-Adapter
 pip install -e .
+
+# LIBERO is expected at VLA-Adapter/LIBERO
+git clone https://github.com/Lifelong-Robot-Learning/LIBERO LIBERO
+cd LIBERO && pip install -e . && cd ..
 ```
 
-# Datasets
-We provide high-quality human teleoperation demonstrations for the four task suites in **LIBERO**. To download the demonstration dataset, run:
-```python
-python benchmark_scripts/download_libero_datasets.py
-```
-By default, the dataset will be stored under the ```LIBERO``` folder and all four datasets will be downloaded. To download a specific dataset, use
-```python
-python benchmark_scripts/download_libero_datasets.py --datasets DATASET
-```
-where ```DATASET``` is chosen from `[libero_spatial, libero_object, libero_100, libero_goal`.
+Install OpenCV (required for observation noise):
 
-**NEW!!!**
-
-Alternatively, you can download the dataset from HuggingFace by using:
-```python
-python benchmark_scripts/download_libero_datasets.py --use-huggingface
+```bash
+pip install opencv-python
 ```
 
-This option can also be combined with the specific dataset selection:
-```python
-python benchmark_scripts/download_libero_datasets.py --datasets DATASET --use-huggingface
+Download the LIBERO-Long checkpoint from HuggingFace:
+
+```bash
+mkdir -p pretrained_models
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download(repo_id='VLA-Adapter/LIBERO-Long', local_dir='pretrained_models/LIBERO-Long')
+"
 ```
 
-The datasets hosted on HuggingFace are available at [here](https://huggingface.co/datasets/yifengzhu-hf/LIBERO-datasets).
+### Base evaluation command
 
+All examples below extend this base command:
 
-# Getting Started
+```bash
+cd /path/to/VLA-Adapter
 
-For a detailed walk-through, please either refer to the documentation or the notebook examples provided under the `notebooks` folder. In the following, we provide example scripts for retrieving a task, training and evaluation.
+MUJOCO_GL=egl EGL_DEVICE_ID=0 \
+PYTHONPATH=./LIBERO:. \
+python experiments/robot/libero/run_libero_eval.py \
+    --pretrained_checkpoint pretrained_models/LIBERO-Long \
+    --task_suite_name libero_10 \
+    --num_trials_per_task 20 \
+    --num_open_loop_steps 8 \
+    --use_l1_regression True \
+    --use_proprio True \
+    --use_pro_version False \
+    --num_images_in_input 2 \
+    --use_wandb False \
+    [PERTURBATION FLAGS]
+```
 
-## Task
+To evaluate a single task (0-indexed), add `--task_id N`. Without it, all tasks in the suite are evaluated.
 
-The following is a minimal example of retrieving a specific task from a specific task suite.
-```python
+---
+
+## 1. Action Noise
+
+**File:** `experiments/robot/libero/action_noise.py`
+
+Noise is added to the 7-dimensional action vector **after** the policy produces it and **before** it is sent to the environment. The action is clipped to `[-1, 1]` after noise is applied.
+
+### Noise types
+
+| `--noise_type` | Description | Magnitude meaning |
+|---|---|---|
+| `gaussian` | N(0, σ) per action dimension | Standard deviation σ |
+| `uniform` | Uniform in [-m, +m] | Half-width m |
+| `constant` | Fixed offset added to all dims | Offset value |
+| `salt_pepper` | Random dims snapped to ±magnitude | Snap value; `--salt_pepper_probability` controls fraction |
+| `impulse` | Rare high-amplitude spikes | Spike amplitude; `--impulse_probability` controls rate |
+
+### CLI flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--action_noise_std` | `0.0` | Noise magnitude (0 = disabled) |
+| `--noise_type` | `gaussian` | Noise distribution |
+
+### Examples
+
+```bash
+# Gaussian action noise, σ=0.1
+--action_noise_std 0.1 --noise_type gaussian
+
+# Gaussian action noise, σ=0.2
+--action_noise_std 0.2 --noise_type gaussian
+
+# Uniform action noise, half-width 0.15
+--action_noise_std 0.15 --noise_type uniform
+
+# Salt & pepper — 10% of action dims flipped to ±1.0
+--action_noise_std 1.0 --noise_type salt_pepper
+
+# Impulse — 5% chance per step of a large spike
+--action_noise_std 2.0 --noise_type impulse
+```
+
+### Measured results on LIBERO-10 (Gaussian, all 10 tasks, 20 episodes each)
+
+| σ | Overall success rate |
+|---|---|
+| 0 (baseline) | 91.5% |
+| 0.1 | 79.0% |
+| 0.2 | 36.0% |
+| 0.3 | 7.0% |
+
+Per-task breakdown:
+
+| Task | Description | σ=0 | σ=0.1 | σ=0.2 | σ=0.3 |
+|------|-------------|-----|-------|-------|-------|
+| 0 | put alphabet soup + tomato sauce in basket | 95% | 75% | 35% | 0% |
+| 1 | put cream cheese + butter in basket | 100% | 90% | 40% | 5% |
+| 2 | turn on stove + put moka pot on it | 100% | 95% | 45% | 5% |
+| 3 | put black bowl in bottom drawer + close | 100% | 95% | 55% | 25% |
+| 4 | put white mug on left plate + yellow/white mug on right | 95% | 75% | 10% | 10% |
+| 5 | pick up book + place in back compartment of caddy | 100% | 90% | 60% | 10% |
+| 6 | put white mug on plate + chocolate pudding to right | 70% | 60% | 15% | 0% |
+| 7 | put alphabet soup + cream cheese in basket | 95% | 90% | 40% | 10% |
+| 8 | put both moka pots on stove | 70% | 50% | 20% | 0% |
+| 9 | put yellow/white mug in microwave + close | 90% | 70% | 40% | 5% |
+
+---
+
+## 2. Observation Noise
+
+**File:** `experiments/robot/libero/visual_noise.py`
+
+Sourced from [RobustVLA](https://github.com/gakakulicc/RobustVLA). Noise is applied to both the front-facing and wrist camera images **after** resizing, **before** the images are passed to the policy. Operates on `uint8` images in `[0, 255]` pixel space using NumPy and OpenCV.
+
+For perturbations with spatial structure (shift, rotation, color jitter, blur), parameters are **sampled once per episode** and held fixed for all timesteps in that episode — so the perturbation is consistent within an episode rather than flickering every step.
+
+### Noise types
+
+| `--obs_noise_type` | Description | Key parameter |
+|---|---|---|
+| `gaussian` | Additive pixel noise N(0, σ) | `--obs_noise` = σ in pixel units [0–255] |
+| `salt_pepper` | Random pixels set to 0 or 255 | `--obs_salt_pepper_probability` = fraction corrupted |
+| `blur` | Gaussian blur | `--obs_blur_kernel_size`, `--obs_blur_sigma` |
+| `image_shift` | Translate image toward upper-left | `--obs_image_shift_ratio` = max shift as fraction of image size |
+| `image_rotation` | Rotate image counterclockwise | `--obs_image_rotation_angle` = max angle in degrees |
+| `enhanced_color_jitter` | Brightness, contrast, saturation, sharpness | `--obs_enhanced_color_jitter_factor` = max factor |
+
+### CLI flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--obs_noise` | `0.0` | Noise magnitude (0 = disabled) |
+| `--obs_noise_type` | `gaussian` | Noise type |
+| `--obs_salt_pepper_probability` | `0.1` | Fraction of pixels corrupted (salt & pepper only) |
+| `--obs_blur_kernel_size` | `5` | Blur kernel size, must be odd |
+| `--obs_blur_sigma` | `1.0` | Gaussian blur sigma |
+| `--obs_image_shift_ratio` | `0.1` | Max shift as fraction of image width/height |
+| `--obs_image_rotation_angle` | `30.0` | Max rotation in degrees |
+| `--obs_enhanced_color_jitter_factor` | `3.0` | Max jitter factor |
+
+### Examples
+
+```bash
+# Gaussian pixel noise, σ=25 (moderate)
+--obs_noise 25 --obs_noise_type gaussian
+
+# Gaussian pixel noise, σ=70 (aggressive)
+--obs_noise 70 --obs_noise_type gaussian
+
+# Salt & pepper — 10% of pixels corrupted
+--obs_noise 1 --obs_noise_type salt_pepper --obs_salt_pepper_probability 0.1
+
+# Gaussian blur
+--obs_noise 1 --obs_noise_type blur --obs_blur_kernel_size 7 --obs_blur_sigma 2.0
+
+# Image shift — up to 10% of image size, fixed per episode
+--obs_noise 1 --obs_noise_type image_shift --obs_image_shift_ratio 0.1
+
+# Image rotation — up to 30°, fixed per episode
+--obs_noise 1 --obs_noise_type image_rotation --obs_image_rotation_angle 30.0
+
+# Color jitter
+--obs_noise 1 --obs_noise_type enhanced_color_jitter --obs_enhanced_color_jitter_factor 3.0
+```
+
+### Measured results on LIBERO-10 (Gaussian, all 10 tasks, 20 episodes each)
+
+| obs_noise (σ) | Overall success rate |
+|---|---|
+| 0 (baseline) | 91.5% |
+| 70 | 4.0% |
+
+Per-task breakdown at obs_noise=70:
+
+| Task | Description | σ=0 | obs σ=70 |
+|---|---|---|---|
+| 0 | put alphabet soup + tomato sauce in basket | 95% | 0% |
+| 1 | put cream cheese + butter in basket | 100% | 0% |
+| 2 | turn on stove + put moka pot on it | 100% | 0% |
+| 3 | put black bowl in bottom drawer + close | 100% | 40% |
+| 4 | put white mug on left plate + yellow/white mug on right | 95% | 0% |
+| 5 | pick up book + place in back compartment of caddy | 100% | 0% |
+| 6 | put white mug on plate + chocolate pudding to right | 70% | 0% |
+| 7 | put alphabet soup + cream cheese in basket | 95% | 0% |
+| 8 | put both moka pots on stove | 70% | 0% |
+| 9 | put yellow/white mug in microwave + close | 90% | 0% |
+
+---
+
+## 3. Object Force Perturbation
+
+**File:** `experiments/robot/libero/env_perturbations.py`
+
+Applies a random-direction external force directly to a named MuJoCo body in the scene (e.g. the object being manipulated). Force is applied via `sim.data.xfrc_applied` and takes effect at the next `env.step()`. Units are **Newtons** (MuJoCo standard SI).
+
+The force is triggered stochastically — each step has a configurable probability of starting a new force impulse, which is then sustained for a fixed number of steps. The direction is sampled uniformly on the unit sphere each time a new impulse fires. Forces are always cleared at episode end.
+
+### Finding body names
+
+Before running, identify the MuJoCo body names for objects in your task:
+
+```bash
+MUJOCO_GL=egl EGL_DEVICE_ID=0 \
+PYTHONPATH=./LIBERO:. \
+python -c "
 from libero.libero import benchmark
-from libero.libero.envs import OffScreenRenderEnv
+from experiments.robot.libero.libero_utils import get_libero_env
+from experiments.robot.libero.env_perturbations import list_body_names
 
-
-benchmark_dict = benchmark.get_benchmark_dict()
-task_suite_name = "libero_10" # can also choose libero_spatial, libero_object, etc.
-task_suite = benchmark_dict[task_suite_name]()
-
-# retrieve a specific task
-task_id = 0
-task = task_suite.get_task(task_id)
-task_name = task.name
-task_description = task.language
-task_bddl_file = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
-print(f"[info] retrieving task {task_id} from suite {task_suite_name}, the " + \
-      f"language instruction is {task_description}, and the bddl file is {task_bddl_file}")
-
-# step over the environment
-env_args = {
-    "bddl_file_name": task_bddl_file,
-    "camera_heights": 128,
-    "camera_widths": 128
-}
-env = OffScreenRenderEnv(**env_args)
-env.seed(0)
+suite = benchmark.get_benchmark_dict()['libero_10']()
+task = suite.get_task(6)  # change task index as needed
+env, _ = get_libero_env(task, 'openvla', resolution=256)
 env.reset()
-init_states = task_suite.get_task_init_states(task_id) # for benchmarking purpose, we fix the a set of initial states
-init_state_id = 0
-env.set_init_state(init_states[init_state_id])
-
-dummy_action = [0.] * 7
-for step in range(10):
-    obs, reward, done, info = env.step(dummy_action)
+print([b for b in list_body_names(env) if b])
 env.close()
-```
-Currently, we only support sparse reward function (i.e., the agent receives `+1` when the task is finished). As sparse-reward RL is extremely hard to learn, currently we mainly focus on lifelong imitation learning.
-
-## Training
-To start a lifelong learning experiment, please choose:
-- `BENCHMARK` from `[LIBERO_SPATIAL, LIBERO_OBJECT, LIBERO_GOAL, LIBERO_90, LIBERO_10]`
-- `POLICY` from `[bc_rnn_policy, bc_transformer_policy, bc_vilt_policy]`
-- `ALGO` from `[base, er, ewc, packnet, multitask]`
-
-then run the following:
-
-```shell
-export CUDA_VISIBLE_DEVICES=GPU_ID && \
-export MUJOCO_EGL_DEVICE_ID=GPU_ID && \
-python libero/lifelong/main.py seed=SEED \
-                               benchmark_name=BENCHMARK \
-                               policy=POLICY \
-                               lifelong=ALGO
-```
-Please see the documentation for the details of reproducing the study results.
-
-## Evaluation
-
-By default the policies will be evaluated on the fly during training. If you have limited computing resource of GPUs, we offer an evaluation script for you to evaluate models separately.
-
-```shell
-python libero/lifelong/evaluate.py --benchmark BENCHMARK_NAME \
-                                   --task_id TASK_ID \ 
-                                   --algo ALGO_NAME \
-                                   --policy POLICY_NAME \
-                                   --seed SEED \
-                                   --ep EPOCH \
-                                   --load_task LOAD_TASK \
-                                   --device_id CUDA_ID
+"
 ```
 
-# Citation
-If you find **LIBERO** to be useful in your own research, please consider citing our paper:
-
-```bibtex
-@article{liu2023libero,
-  title={LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning},
-  author={Liu, Bo and Zhu, Yifeng and Gao, Chongkai and Feng, Yihao and Liu, Qiang and Zhu, Yuke and Stone, Peter},
-  journal={arXiv preprint arXiv:2306.03310},
-  year={2023}
-}
+Example output for LIBERO-10 task 6:
+```
+['world', 'floor', 'living_room_table', 'robot0_base', ...,
+ 'porcelain_mug_1_main', 'red_coffee_mug_1_main', 'plate_1_main', 'chocolate_pudding_1_main']
 ```
 
-# License
-| Component        | License                                                                                                                             |
-|------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| Codebase         | [MIT License](LICENSE)                                                                                                                      |
-| Datasets         | [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/legalcode)                 |
+### CLI flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--obj_force_magnitude` | `0.0` | Force in Newtons (0 = disabled) |
+| `--obj_force_body` | `""` | MuJoCo body name to push (empty = disabled) |
+| `--obj_force_probability` | `0.05` | Per-step probability of triggering a new impulse |
+| `--obj_force_duration` | `5` | Steps to sustain each impulse |
+
+### Guidance on force magnitude
+
+LIBERO tabletop objects are small (≈0.1–0.2 kg). Recommended values:
+
+| Force (N) | Effect |
+|---|---|
+| 0.05–0.1 | Subtle nudge, realistic for a light tap |
+| 0.5 | Strong push, object noticeably displaced |
+| 5.0+ | Unrealistically aggressive, immediate task failure |
+
+### Examples
+
+```bash
+# Light push on mug (task 6), 1% chance per step, sustained 5 steps
+--task_id 6 \
+--obj_force_magnitude 0.1 \
+--obj_force_body porcelain_mug_1_main \
+--obj_force_probability 0.01 \
+--obj_force_duration 5
+
+# Push on chocolate pudding (second sub-goal)
+--task_id 6 \
+--obj_force_magnitude 0.1 \
+--obj_force_body chocolate_pudding_1_main \
+--obj_force_probability 0.01 \
+--obj_force_duration 5
+```
+
+### Measured results on LIBERO-10 task 6 (baseline: 70%)
+
+| Target object | Force (N) | Probability | Success rate |
+|---|---|---|---|
+| — | — | — | 70% |
+| white mug | 0.1 | 1% | 65% |
+| white mug | 0.5 | 1% | 30% |
+| white mug | 0.5 | 5% | 0% |
+| white mug | 5.0 | 5% | 0% |
+| chocolate pudding | 0.1 | 1% | 35% |
+
+Pushing the second-goal object (chocolate pudding) is more disruptive than pushing the primary manipulation target (mug), because the pudding's final resting position determines task success and the policy cannot recover from a displaced target.
+
+---
+
+## Combining perturbations
+
+All three perturbation types can be used simultaneously:
+
+```bash
+MUJOCO_GL=egl EGL_DEVICE_ID=0 \
+PYTHONPATH=./LIBERO:. \
+python experiments/robot/libero/run_libero_eval.py \
+    --pretrained_checkpoint pretrained_models/LIBERO-Long \
+    --task_suite_name libero_10 \
+    --num_trials_per_task 20 \
+    --num_open_loop_steps 8 \
+    --use_l1_regression True \
+    --use_proprio True \
+    --use_pro_version False \
+    --num_images_in_input 2 \
+    --use_wandb False \
+    --task_id 6 \
+    --action_noise_std 0.1 --noise_type gaussian \
+    --obs_noise 25 --obs_noise_type gaussian \
+    --obj_force_magnitude 0.1 --obj_force_body chocolate_pudding_1_main \
+    --obj_force_probability 0.01 --obj_force_duration 5
+```
+
+---
+
+## Running in a persistent session (tmux)
+
+For long all-task evaluations that should survive SSH disconnects:
+
+```bash
+tmux new-session -d -s eval
+
+tmux send-keys -t eval "
+MUJOCO_GL=egl EGL_DEVICE_ID=0 \
+PYTHONPATH=./LIBERO:. \
+python experiments/robot/libero/run_libero_eval.py \
+    --pretrained_checkpoint pretrained_models/LIBERO-Long \
+    --task_suite_name libero_10 \
+    --num_trials_per_task 20 \
+    --num_open_loop_steps 8 \
+    --use_l1_regression True \
+    --use_proprio True \
+    --use_pro_version False \
+    --num_images_in_input 2 \
+    --use_wandb False \
+    --action_noise_std 0.2 --noise_type gaussian \
+    2>&1 | tee libero10_action_noise_0.2.log
+" Enter
+
+# Reattach later
+tmux attach -t eval
+
+# Check progress without attaching
+tail -f libero10_action_noise_0.2.log
+```
+
+---
+
+## File reference
+
+```
+VLA-Adapter/experiments/robot/libero/
+├── action_noise.py          # Action perturbation module
+├── visual_noise.py          # Observation image perturbation module (from RobustVLA)
+├── env_perturbations.py     # MuJoCo object force perturbation module
+└── run_libero_eval.py       # Main eval script (all perturbations wired in)
+```
