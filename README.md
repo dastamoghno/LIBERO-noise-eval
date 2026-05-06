@@ -20,15 +20,16 @@ All three can be combined in a single run.
 
 ### Prerequisites
 
-Clone and install VLA-Adapter and LIBERO:
+Clone and install VLA-Adapter and LIBERO side-by-side:
 
 ```bash
 git clone https://github.com/your-org/VLA-Adapter
 cd VLA-Adapter
 pip install -e .
+cd ..
 
-# LIBERO is expected at VLA-Adapter/LIBERO
-git clone https://github.com/Lifelong-Robot-Learning/LIBERO LIBERO
+# Clone this repository side-by-side with VLA-Adapter
+git clone https://github.com/dastamoghno/LIBERO-noise-eval LIBERO
 cd LIBERO && pip install -e . && cd ..
 ```
 
@@ -56,7 +57,7 @@ All examples below extend this base command:
 cd /path/to/VLA-Adapter
 
 MUJOCO_GL=egl EGL_DEVICE_ID=0 \
-PYTHONPATH=./LIBERO:. \
+PYTHONPATH=../LIBERO:. \
 python experiments/robot/libero/run_libero_eval.py \
     --pretrained_checkpoint pretrained_models/LIBERO-Long \
     --task_suite_name libero_10 \
@@ -237,7 +238,7 @@ Before running, identify the MuJoCo body names for objects in your task:
 
 ```bash
 MUJOCO_GL=egl EGL_DEVICE_ID=0 \
-PYTHONPATH=./LIBERO:. \
+PYTHONPATH=../LIBERO:. \
 python -c "
 from libero.libero import benchmark
 from experiments.robot.libero.libero_utils import get_libero_env
@@ -316,7 +317,7 @@ All three perturbation types can be used simultaneously:
 
 ```bash
 MUJOCO_GL=egl EGL_DEVICE_ID=0 \
-PYTHONPATH=./LIBERO:. \
+PYTHONPATH=../LIBERO:. \
 python experiments/robot/libero/run_libero_eval.py \
     --pretrained_checkpoint pretrained_models/LIBERO-Long \
     --task_suite_name libero_10 \
@@ -345,7 +346,7 @@ tmux new-session -d -s eval
 
 tmux send-keys -t eval "
 MUJOCO_GL=egl EGL_DEVICE_ID=0 \
-PYTHONPATH=./LIBERO:. \
+PYTHONPATH=../LIBERO:. \
 python experiments/robot/libero/run_libero_eval.py \
     --pretrained_checkpoint pretrained_models/LIBERO-Long \
     --task_suite_name libero_10 \
