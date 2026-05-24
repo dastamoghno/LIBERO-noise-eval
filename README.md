@@ -379,3 +379,80 @@ VLA-Adapter/experiments/robot/libero/
 ├── env_perturbations.py     # MuJoCo object force perturbation module
 └── run_libero_eval.py       # Main eval script (all perturbations wired in)
 ```
+
+---
+
+## Reproduce: factorial OFT-vs-Adapter study
+
+This repository also ships the modified rollout files (so you don't have to patch
+upstream by hand) and the statistical-analysis pipeline used to answer
+"does the perturbation phase/magnitude distinguish OpenVLA-OFT from VLA-Adapter?"
+
+### Layout
+
+```
+LIBERO-noise-eval/
+├── analysis/             # parser + logistic regression + plots
+├── vla_adapter/          # mirrored modified+new files for VLA-Adapter
+│   └── experiments/robot/{libero/...,openvla_utils.py}
+└── openvla_oft/          # mirrored modified+new files for OpenVLA-OFT
+    └── experiments/robot/libero/{run_libero_eval.py, env_perturbations.py}
+```
+
+### 1. Clone and patch the policy repos
+
+```bash
+# VLA-Adapter (0.5B)
+git clone https://github.com/OpenHelix-Team/VLA-Adapter
+cp -r vla_adapter/experiments/ VLA-Adapter/
+
+# OpenVLA-OFT (7B)
+git clone https://github.com/moojink/openvla-oft
+cp -r openvla_oft/experiments/ openvla-oft/
+```
+
+Both repos are MIT-licensed; the original LICENSE files are preserved alongside
+the mirrored code in `vla_adapter/` and `openvla_oft/`.
+
+### 2. Set up environments
+
+VLA-Adapter and OpenVLA-OFT each need their own conda env. For OFT, the included
+`install_oft.py` is a working reference of the package versions we ended up with.
+For analysis, create an isolated env:
+
+```bash
+conda create -n pertstats python=3.11 -y
+conda run -n pertstats pip install pandas statsmodels scipy matplotlib
+```
+
+### 3. Run the factorial grid
+
+```bash
+bash analysis/run_grid.sh all          # 20 cells (10 per model): baseline,
+                                       # phase A/B/C × dx {1,3,5,8} cm, n=50
+bash analysis/run_grid_plate.sh all    # 8 plate-perturbation cells
+```
+
+Logs land in each policy repo's `experiments/logs/EVAL-*.txt`.
+
+### 4. Parse + analyse
+
+```bash
+conda run -n pertstats python analysis/parse_eval_logs.py        # -> perturbation_results.csv
+conda run -n pertstats python analysis/perturbation_stats.py     # LRT, Wilson CIs, plots
+conda run -n pertstats python analysis/routing_analysis.py       # routing-ceiling test
+conda run -n pertstats python analysis/plate_analysis.py         # plate vs pudding
+```
+
+Outputs (already committed for reference): `analysis/stats_report.txt`,
+`analysis/plots/*.png`, `analysis/perturbation_results.csv` (1300 rows).
+
+### Key finding (24-cell factorial, n=50/cell)
+
+`model:magnitude` interaction LRT  p=0.72,  `model:phase`  p=0.36,
+`model:phase:magnitude` p=0.75 (all Holm-corrected, ns).
+The two models degrade identically; OFT is uniformly ~4 pp better but the
+main effect itself is not significant (p=0.53).  A detector-gated
+Adapter→OFT router has a ceiling of +4.2 pp on this task and no per-cell
+structure to exploit.
+

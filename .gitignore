@@ -6,8 +6,8 @@ results
 outputs/*
 /MUJOCO_LOG.TXT
 wandb
-experiments/
-experiments_saved/
+/experiments/
+/experiments_saved/
 clip/
 gpt/
 bert/
