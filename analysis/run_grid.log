@@ -1,0 +1,81 @@
+=== adapter baseline ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.7600 (76.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseA dx1cm  win[0,60) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.7000 (70.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseA dx3cm  win[0,60) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.6000 (60.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseA dx5cm  win[0,60) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.5200 (52.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseA dx8cm  win[0,60) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.2600 (26.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseB dx8cm  win[60,200) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.3200 (32.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseC dx1cm  win[200,240) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.7400 (74.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseC dx3cm  win[200,240) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.7200 (72.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseC dx5cm  win[200,240) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.7600 (76.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter phaseC dx8cm  win[200,240) ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.7000 (70.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== oft baseline ===
+	),
+	result = 0
+)
+=== oft phaseA dx1cm  win[0,60) ===
+	),
+	result = 0
+)
+=== oft phaseA dx3cm  win[0,60) ===
+	),
+	result = 0
+)
+=== oft phaseA dx5cm  win[0,60) ===
+	),
+	result = 0
+)
+=== oft phaseA dx8cm  win[0,60) ===
+	),
+	result = 0
+)
+=== oft phaseB dx8cm  win[60,200) ===
+	),
+	result = 0
+)
+=== oft phaseC dx1cm  win[200,240) ===
+	),
+	result = 0
+)
+=== oft phaseC dx3cm  win[200,240) ===
+	),
+	result = 0
+)
+=== oft phaseC dx5cm  win[200,240) ===
+	),
+	result = 0
+)
+=== oft phaseC dx8cm  win[200,240) ===
+	),
+	result = 0
+)
+GRID DONE: all

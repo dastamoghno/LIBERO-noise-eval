@@ -1,0 +1,33 @@
+=== adapter plate phaseB dx1cm ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.6800 (68.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter plate phaseB dx3cm ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.6600 (66.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter plate phaseB dx5cm ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.6400 (64.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== adapter plate phaseB dx8cm ===
+                 INFO     | >> Overall success rate:      run_libero_eval.py:262
+                          0.5800 (58.0%)                                        
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+=== oft plate phaseB dx1cm ===
+	),
+	result = 0
+)
+=== oft plate phaseB dx3cm ===
+	),
+	result = 0
+)
+=== oft plate phaseB dx5cm ===
+	),
+	result = 0
+)
+=== oft plate phaseB dx8cm ===
+	),
+	result = 0
+)
+PLATE GRID DONE: all
